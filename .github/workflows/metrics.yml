@@ -16,11 +16,9 @@ jobs:
 
           # Options
           user: AndreaMolinari
-          template: classic
-          # base: header, activity, community, repositories, metadata
-          base: header
+          template: community
+          base: header, activity, community, repositories, metadata
           config_timezone: Europe/Rome
-          plugin_activity: yes
           plugin_achievements: yes
           plugin_achievements_display: compact
           plugin_achievements_secrets: yes
