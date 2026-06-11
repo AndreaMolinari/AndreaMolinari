@@ -4,6 +4,13 @@
  * Zero dipendenze: GraphQL API di GitHub via fetch nativo, SVG disegnato
  * a mano con template string. Eseguibile direttamente con Node >= 23.6
  * (type stripping nativo): `GITHUB_TOKEN=... node scripts/generate-card.ts`
+ *
+ * Conteggia anche l'attività privata:
+ * - i commit sommano `restrictedContributionsCount` (contributi privati che
+ *   il profilo condivide come conteggio anonimo);
+ * - i linguaggi aggregano i repo personali (pubblici e privati) più i repo
+ *   di org/collaborazioni a cui l'utente ha contribuito, nei limiti di ciò
+ *   che il token può leggere (PAT con scope `repo` + SSO autorizzato).
  */
 
 import { writeFileSync } from "node:fs";
@@ -26,22 +33,28 @@ interface LanguageEdge {
   node: { name: string; color: string | null };
 }
 
-interface ApiData {
+interface RepoNode {
+  stargazerCount?: number;
+  languages: { edges: LanguageEdge[] };
+}
+
+interface PageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
+}
+
+interface StatsData {
   user: {
     name: string | null;
     login: string;
     followers: { totalCount: number };
-    repositories: {
-      totalCount: number;
-      nodes: Array<{
-        stargazerCount: number;
-        languages: { edges: LanguageEdge[] };
-      }>;
-    };
+    repositories: { totalCount: number };
+    repositoriesContributedTo: { totalCount: number };
     contributionsCollection: {
       totalCommitContributions: number;
+      restrictedContributionsCount: number;
       totalPullRequestContributions: number;
-      totalIssueContributions: number;
+      totalPullRequestReviewContributions: number;
       contributionCalendar: {
         totalContributions: number;
         weeks: Array<{
@@ -52,25 +65,36 @@ interface ApiData {
   };
 }
 
-const QUERY = `
+async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+  const res = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) throw new Error(`GitHub API: ${res.status} ${await res.text()}`);
+  const json = (await res.json()) as { data?: T; errors?: unknown[] };
+  if (json.errors?.length || !json.data) {
+    throw new Error(`GraphQL errors: ${JSON.stringify(json.errors)}`);
+  }
+  return json.data;
+}
+
+const STATS_QUERY = `
   query ($login: String!) {
     user(login: $login) {
       name
       login
       followers { totalCount }
-      repositories(first: 100, ownerAffiliations: OWNER, isFork: false) {
-        totalCount
-        nodes {
-          stargazerCount
-          languages(first: 8, orderBy: { field: SIZE, direction: DESC }) {
-            edges { size node { name color } }
-          }
-        }
-      }
+      repositories(ownerAffiliations: OWNER, isFork: false) { totalCount }
+      repositoriesContributedTo(includeUserRepositories: false, contributionTypes: [COMMIT, PULL_REQUEST]) { totalCount }
       contributionsCollection {
         totalCommitContributions
+        restrictedContributionsCount
         totalPullRequestContributions
-        totalIssueContributions
+        totalPullRequestReviewContributions
         contributionCalendar {
           totalContributions
           weeks { contributionDays { date contributionCount } }
@@ -80,21 +104,50 @@ const QUERY = `
   }
 `;
 
-async function fetchData(): Promise<ApiData> {
-  const res = await fetch("https://api.github.com/graphql", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: QUERY, variables: { login: LOGIN } }),
-  });
-  if (!res.ok) throw new Error(`GitHub API: ${res.status} ${await res.text()}`);
-  const json = (await res.json()) as { data?: ApiData; errors?: unknown[] };
-  if (json.errors?.length || !json.data) {
-    throw new Error(`GraphQL errors: ${JSON.stringify(json.errors)}`);
+const OWN_REPOS_QUERY = `
+  query ($login: String!, $after: String) {
+    user(login: $login) {
+      repositories(first: 100, after: $after, ownerAffiliations: OWNER, isFork: false) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          stargazerCount
+          languages(first: 8, orderBy: { field: SIZE, direction: DESC }) {
+            edges { size node { name color } }
+          }
+        }
+      }
+    }
   }
-  return json.data;
+`;
+
+const CONTRIBUTED_REPOS_QUERY = `
+  query ($login: String!, $after: String) {
+    user(login: $login) {
+      repositoriesContributedTo(first: 100, after: $after, includeUserRepositories: false, contributionTypes: [COMMIT, PULL_REQUEST]) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          languages(first: 8, orderBy: { field: SIZE, direction: DESC }) {
+            edges { size node { name color } }
+          }
+        }
+      }
+    }
+  }
+`;
+
+async function fetchAllRepos(
+  query: string,
+  pick: (u: Record<string, unknown>) => { pageInfo: PageInfo; nodes: Array<RepoNode | null> },
+): Promise<RepoNode[]> {
+  const repos: RepoNode[] = [];
+  let after: string | null = null;
+  do {
+    const data = await gql<{ user: Record<string, unknown> }>(query, { login: LOGIN, after });
+    const page = pick(data.user);
+    repos.push(...page.nodes.filter((n): n is RepoNode => n !== null));
+    after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+  } while (after);
+  return repos;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +237,7 @@ function languagesBar(
 
 function heatmap(
   y: number,
-  weeks: ApiData["user"]["contributionsCollection"]["contributionCalendar"]["weeks"],
+  weeks: StatsData["user"]["contributionsCollection"]["contributionCalendar"]["weeks"],
 ): string {
   const pitch = Math.floor(INNER / weeks.length);
   const cell = pitch - 3;
@@ -224,15 +277,22 @@ function heatmap(
 // Render
 // ---------------------------------------------------------------------------
 
-function render(data: ApiData): string {
+function render(
+  data: StatsData,
+  ownRepos: RepoNode[],
+  contributedRepos: RepoNode[],
+): string {
   const u = data.user;
   const cc = u.contributionsCollection;
 
-  const stars = u.repositories.nodes.reduce((s, r) => s + r.stargazerCount, 0);
+  const stars = ownRepos.reduce((s, r) => s + (r.stargazerCount ?? 0), 0);
+  // i contributi privati "ristretti" sono in gran parte commit: sommarli ai
+  // commit visibili è la stessa convenzione di github-readme-stats
+  const commits = cc.totalCommitContributions + cc.restrictedContributionsCount;
 
-  // linguaggi aggregati per byte su tutti i repo
+  // linguaggi aggregati per byte: repo personali + repo a cui ha contribuito
   const langBytes = new Map<string, { size: number; color: string }>();
-  for (const repo of u.repositories.nodes) {
+  for (const repo of [...ownRepos, ...contributedRepos]) {
     for (const { size, node } of repo.languages.edges) {
       const prev = langBytes.get(node.name);
       langBytes.set(node.name, {
@@ -305,11 +365,11 @@ ${
   </g>
 
   ${statsRow(STATS_Y, [
-    { value: fmt(stars), label: "STARS" },
-    { value: fmt(cc.totalCommitContributions), label: "COMMITS" },
+    { value: fmt(commits), label: "COMMITS" },
     { value: fmt(cc.totalPullRequestContributions), label: "PULL REQUESTS" },
-    { value: fmt(cc.totalIssueContributions), label: "ISSUES" },
     { value: fmt(u.followers.totalCount), label: "FOLLOWERS" },
+    { value: fmt(u.repositoriesContributedTo.totalCount), label: "CONTRIBUTED TO" },
+    { value: fmt(stars), label: "STARS" },
     { value: fmt(u.repositories.totalCount), label: "REPOSITORIES" },
   ])}
 
@@ -319,12 +379,20 @@ ${
   <text x="${PAD}" y="${HEAT_TITLE_Y}" class="section">CONTRIBUTIONS</text>
   ${heatmap(HEAT_Y, weeks)}
 
-  <text x="${W - PAD}" y="${H - 18}" text-anchor="end" class="footer">updated ${updated}</text>
+  <text x="${W - PAD}" y="${H - 18}" text-anchor="end" class="footer">includes private activity · updated ${updated}</text>
 </svg>
 `;
 }
 
-const data = await fetchData();
-const svg = render(data);
+const [stats, ownRepos, contributedRepos] = await Promise.all([
+  gql<StatsData>(STATS_QUERY, { login: LOGIN }),
+  fetchAllRepos(OWN_REPOS_QUERY, (u) => (u as { repositories: { pageInfo: PageInfo; nodes: Array<RepoNode | null> } }).repositories),
+  fetchAllRepos(CONTRIBUTED_REPOS_QUERY, (u) => (u as { repositoriesContributedTo: { pageInfo: PageInfo; nodes: Array<RepoNode | null> } }).repositoriesContributedTo),
+]);
+
+console.log(
+  `repo analizzati: ${ownRepos.length} personali + ${contributedRepos.length} contribuiti (visibili al token)`,
+);
+const svg = render(stats, ownRepos, contributedRepos);
 writeFileSync(OUTPUT, svg);
 console.log(`✓ ${OUTPUT} generato (${(svg.length / 1024).toFixed(1)} kB)`);
