@@ -40,15 +40,15 @@
 
   
     <g class="rise" style="animation-delay:120ms">
-      <text x="40" y="148" class="stat-value">9</text>
+      <text x="40" y="148" class="stat-value">7</text>
       <text x="40" y="170" class="stat-label">STARS</text>
     </g>
     <g class="rise" style="animation-delay:210ms">
-      <text x="173.33333333333334" y="148" class="stat-value">58</text>
+      <text x="173.33333333333334" y="148" class="stat-value">529</text>
       <text x="173.33333333333334" y="170" class="stat-label">COMMITS</text>
     </g>
     <g class="rise" style="animation-delay:300ms">
-      <text x="306.6666666666667" y="148" class="stat-value">13</text>
+      <text x="306.6666666666667" y="148" class="stat-value">40</text>
       <text x="306.6666666666667" y="170" class="stat-label">PULL REQUESTS</text>
     </g>
     <g class="rise" style="animation-delay:390ms">
@@ -60,38 +60,34 @@
       <text x="573.3333333333334" y="170" class="stat-label">FOLLOWERS</text>
     </g>
     <g class="rise" style="animation-delay:570ms">
-      <text x="706.6666666666667" y="148" class="stat-value">60</text>
+      <text x="706.6666666666667" y="148" class="stat-value">5</text>
       <text x="706.6666666666667" y="170" class="stat-label">REPOSITORIES</text>
     </g>
 
   <text x="40" y="216" class="section">TOP LANGUAGES</text>
   
     <clipPath id="bar-clip"><rect x="40" y="232" width="800" height="12" rx="6"/></clipPath>
-    <g clip-path="url(#bar-clip)" class="grow"><rect x="40.0" y="232" width="282.9" height="12" fill="#3178c6"/><rect x="322.9" y="232" width="192.8" height="12" fill="#4F5D95"/><rect x="515.7" y="232" width="160.3" height="12" fill="#f1e05a"/><rect x="676.0" y="232" width="76.3" height="12" fill="#e34c26"/><rect x="752.3" y="232" width="27.7" height="12" fill="#F05138"/><rect x="780.0" y="232" width="22.5" height="12" fill="#c6538c"/></g>
+    <g clip-path="url(#bar-clip)" class="grow"><rect x="40.0" y="232" width="727.7" height="12" fill="#3178c6"/><rect x="767.7" y="232" width="49.0" height="12" fill="#336790"/><rect x="816.7" y="232" width="18.6" height="12" fill="#663399"/><rect x="835.2" y="232" width="3.1" height="12" fill="#f1e05a"/><rect x="838.4" y="232" width="1.6" height="12" fill="#e34c26"/></g>
     
     <g class="rise" style="animation-delay:400ms">
       <circle cx="45" cy="264" r="5" fill="#3178c6"/>
-      <text x="58" y="268" class="legend">TypeScript <tspan class="legend-pct">35.4%</tspan></text>
+      <text x="58" y="268" class="legend">TypeScript <tspan class="legend-pct">91.0%</tspan></text>
     </g>
     <g class="rise" style="animation-delay:460ms">
-      <circle cx="311.6666666666667" cy="264" r="5" fill="#4F5D95"/>
-      <text x="324.6666666666667" y="268" class="legend">PHP <tspan class="legend-pct">24.1%</tspan></text>
+      <circle cx="311.6666666666667" cy="264" r="5" fill="#336790"/>
+      <text x="324.6666666666667" y="268" class="legend">PLpgSQL <tspan class="legend-pct">6.1%</tspan></text>
     </g>
     <g class="rise" style="animation-delay:520ms">
-      <circle cx="578.3333333333334" cy="264" r="5" fill="#f1e05a"/>
-      <text x="591.3333333333334" y="268" class="legend">JavaScript <tspan class="legend-pct">20.0%</tspan></text>
+      <circle cx="578.3333333333334" cy="264" r="5" fill="#663399"/>
+      <text x="591.3333333333334" y="268" class="legend">CSS <tspan class="legend-pct">2.3%</tspan></text>
     </g>
     <g class="rise" style="animation-delay:580ms">
-      <circle cx="45" cy="288" r="5" fill="#e34c26"/>
-      <text x="58" y="292" class="legend">HTML <tspan class="legend-pct">9.5%</tspan></text>
+      <circle cx="45" cy="288" r="5" fill="#f1e05a"/>
+      <text x="58" y="292" class="legend">JavaScript <tspan class="legend-pct">0.4%</tspan></text>
     </g>
     <g class="rise" style="animation-delay:640ms">
-      <circle cx="311.6666666666667" cy="288" r="5" fill="#F05138"/>
-      <text x="324.6666666666667" y="292" class="legend">Swift <tspan class="legend-pct">3.5%</tspan></text>
-    </g>
-    <g class="rise" style="animation-delay:700ms">
-      <circle cx="578.3333333333334" cy="288" r="5" fill="#c6538c"/>
-      <text x="591.3333333333334" y="292" class="legend">SCSS <tspan class="legend-pct">2.8%</tspan></text>
+      <circle cx="311.6666666666667" cy="288" r="5" fill="#e34c26"/>
+      <text x="324.6666666666667" y="292" class="legend">HTML <tspan class="legend-pct">0.2%</tspan></text>
     </g>
 
   <text x="40" y="352" class="section">CONTRIBUTIONS</text>
