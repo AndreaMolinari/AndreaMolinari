@@ -18,6 +18,9 @@ import { writeFileSync } from "node:fs";
 const LOGIN = process.env.GH_LOGIN ?? "AndreaMolinari";
 const TOKEN = process.env.GITHUB_TOKEN ?? process.env.METRICS_TOKEN;
 const OUTPUT = process.env.OUTPUT ?? "profile-card.svg";
+// per i linguaggi contano solo i repo con push negli ultimi N mesi, così i
+// progetti morti di anni fa non schiacciano il lavoro attuale
+const LANG_MONTHS = Number(process.env.LANG_MONTHS ?? 24);
 
 if (!TOKEN) {
   console.error("Manca GITHUB_TOKEN (o METRICS_TOKEN) nell'ambiente.");
@@ -35,6 +38,7 @@ interface LanguageEdge {
 
 interface RepoNode {
   stargazerCount?: number;
+  pushedAt: string;
   languages: { edges: LanguageEdge[] };
 }
 
@@ -111,6 +115,7 @@ const OWN_REPOS_QUERY = `
         pageInfo { hasNextPage endCursor }
         nodes {
           stargazerCount
+          pushedAt
           languages(first: 8, orderBy: { field: SIZE, direction: DESC }) {
             edges { size node { name color } }
           }
@@ -126,6 +131,7 @@ const CONTRIBUTED_REPOS_QUERY = `
       repositoriesContributedTo(first: 100, after: $after, includeUserRepositories: false, contributionTypes: [COMMIT, PULL_REQUEST]) {
         pageInfo { hasNextPage endCursor }
         nodes {
+          pushedAt
           languages(first: 8, orderBy: { field: SIZE, direction: DESC }) {
             edges { size node { name color } }
           }
@@ -290,9 +296,15 @@ function render(
   // commit visibili è la stessa convenzione di github-readme-stats
   const commits = cc.totalCommitContributions + cc.restrictedContributionsCount;
 
-  // linguaggi aggregati per byte: repo personali + repo a cui ha contribuito
+  // linguaggi aggregati per byte: repo personali + repo a cui ha contribuito,
+  // limitati a quelli attivi di recente
+  const cutoff = Date.now() - LANG_MONTHS * 30 * 86_400_000;
+  const recentRepos = [...ownRepos, ...contributedRepos].filter(
+    (r) => new Date(r.pushedAt).getTime() >= cutoff,
+  );
+  console.log(`repo attivi negli ultimi ${LANG_MONTHS} mesi per i linguaggi: ${recentRepos.length}`);
   const langBytes = new Map<string, { size: number; color: string }>();
-  for (const repo of [...ownRepos, ...contributedRepos]) {
+  for (const repo of recentRepos) {
     for (const { size, node } of repo.languages.edges) {
       const prev = langBytes.get(node.name);
       langBytes.set(node.name, {
@@ -373,7 +385,7 @@ ${
     { value: fmt(u.repositories.totalCount), label: "REPOSITORIES" },
   ])}
 
-  <text x="${PAD}" y="${LANGS_Y - 16}" class="section">TOP LANGUAGES</text>
+  <text x="${PAD}" y="${LANGS_Y - 16}" class="section">TOP LANGUAGES <tspan class="month">· repos active in the last ${LANG_MONTHS} months</tspan></text>
   ${languagesBar(LANGS_Y, langs)}
 
   <text x="${PAD}" y="${HEAT_TITLE_Y}" class="section">CONTRIBUTIONS</text>
